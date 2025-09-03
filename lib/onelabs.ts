@@ -2,21 +2,40 @@ import { SuiClient } from "@onelabs/sui/client"
 import { Transaction } from "@onelabs/sui/transactions"
 import type { Ed25519Keypair } from "@onelabs/sui/keypairs/ed25519"
 
-// Network configuration
+// OneChain OCT Network configuration
 export const NETWORK_CONFIG = {
   testnet: {
     rpc: "https://rpc-testnet.onelabs.cc:443",
     faucet: "https://faucet-testnet.onelabs.cc:443",
+    chainId: "0x1",
+    name: "OneChain OCT Testnet",
+    nativeCurrency: {
+      name: "OCT",
+      symbol: "OCT",
+      decimals: 9
+    }
   },
   mainnet: {
     rpc: "https://rpc.mainnet.onelabs.cc:443",
     faucet: null,
+    chainId: "0x1",
+    name: "OneChain OCT Mainnet",
+    nativeCurrency: {
+      name: "OCT",
+      symbol: "OCT",
+      decimals: 9
+    }
   },
 }
 
-// Initialize OneChain client
+// Initialize OneChain OCT client
 export const suiClient = new SuiClient({
   url: NETWORK_CONFIG.testnet.rpc,
+  // OneChain OCT specific configuration
+  options: {
+    network: "testnet",
+    chainId: NETWORK_CONFIG.testnet.chainId
+  }
 })
 
 // NFT Contract addresses (these would be deployed contracts)

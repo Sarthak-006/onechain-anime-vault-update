@@ -1,14 +1,66 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Search, Wallet, User, Menu, X, Sparkles } from "lucide-react"
+import { useOneWallet, shortenAddress } from "@/lib/wallet"
+import { useToast } from "@/hooks/use-toast"
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [isWalletConnected, setIsWalletConnected] = useState(false)
+  const { toast } = useToast()
+
+  // Use the OneWallet hook (MetaMask-like experience)
+  const {
+    address,
+    connectWallet,
+    disconnectWallet,
+    isConnecting,
+    isConnected,
+    oneWallet
+  } = useOneWallet()
+
+  const onConnect = useCallback(async () => {
+    try {
+      connectWallet()
+      toast({
+        title: "Connecting to OneWallet...",
+        description: "Please approve the connection in your wallet",
+      })
+    } catch (err: any) {
+      console.error("Connect error:", err)
+      toast({
+        title: "OneWallet required",
+        description:
+          "Install OneWallet: https://chromewebstore.google.com/detail/onechain-wallet/gclmcgmpkgblaglfokkaclneihpnbkli",
+      })
+    }
+  }, [connectWallet, toast])
+
+  const onDisconnect = useCallback(() => {
+    try {
+      disconnectWallet()
+      toast({ title: "Wallet disconnected" })
+    } catch (err: any) {
+      console.error("Disconnect error:", err)
+    }
+  }, [disconnectWallet, toast])
+
+  const onDebug = useCallback(() => {
+    console.log("OneWallet Debug Info:", {
+      oneWallet,
+      isConnected,
+      address,
+      isConnecting,
+      availableWallets: oneWallet ? [oneWallet] : []
+    })
+    toast({
+      title: "Debug info logged",
+      description: "Check browser console for OneWallet details",
+    })
+  }, [oneWallet, isConnected, address, isConnecting, toast])
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -47,21 +99,30 @@ export function Header() {
 
         {/* Wallet & User Actions */}
         <div className="flex items-center space-x-2">
-          {isWalletConnected ? (
+          {isConnected && address ? (
             <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={onDisconnect}>
                 <Wallet className="h-4 w-4 mr-2" />
-                0x1234...5678
+                {shortenAddress(address)}
               </Button>
               <Button variant="ghost" size="sm">
                 <User className="h-4 w-4" />
               </Button>
             </div>
           ) : (
-            <Button onClick={() => setIsWalletConnected(true)} className="hidden md:flex">
-              <Wallet className="h-4 w-4 mr-2" />
-              Connect Wallet
-            </Button>
+            <div className="flex items-center space-x-2">
+              <Button
+                onClick={onConnect}
+                disabled={isConnecting}
+                className="hidden md:flex"
+              >
+                <Wallet className="h-4 w-4 mr-2" />
+                {isConnecting ? "Connecting..." : "Connect Wallet"}
+              </Button>
+              <Button onClick={onDebug} variant="outline" size="sm" className="hidden md:flex">
+                Debug
+              </Button>
+            </div>
           )}
 
           {/* Mobile Menu Button */}
@@ -95,11 +156,20 @@ export function Header() {
               </Link>
             </nav>
 
-            {!isWalletConnected && (
-              <Button onClick={() => setIsWalletConnected(true)} className="w-full">
-                <Wallet className="h-4 w-4 mr-2" />
-                Connect Wallet
-              </Button>
+            {!isConnected && (
+              <div className="space-y-2">
+                <Button
+                  onClick={onConnect}
+                  disabled={isConnecting}
+                  className="w-full"
+                >
+                  <Wallet className="h-4 w-4 mr-2" />
+                  {isConnecting ? "Connecting..." : "Connect Wallet"}
+                </Button>
+                <Button onClick={onDebug} variant="outline" className="w-full">
+                  Debug Wallet
+                </Button>
+              </div>
             )}
           </div>
         </div>

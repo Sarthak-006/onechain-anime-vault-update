@@ -3,6 +3,8 @@ import type { Metadata } from "next"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import "./globals.css"
 import { Header } from "@/components/layout/header"
+import { Toaster } from "@/components/ui/toaster"
+import { OneChainProviderWrapper } from "@/components/providers/onechain-provider"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -30,8 +32,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="min-h-screen bg-background font-sans antialiased">
-        <Header />
-        <main>{children}</main>
+        <OneChainProviderWrapper>
+          <Header />
+          <main>{children}</main>
+          <Toaster />
+        </OneChainProviderWrapper>
       </body>
     </html>
   )
