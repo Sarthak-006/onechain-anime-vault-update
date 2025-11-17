@@ -1,17 +1,17 @@
-module animemechandise::animemechandise {
+module anime_merchandise::anime_nft {
     use std::string::{Self, String};
     use std::vector;
-    use one::object::{Self, UID, ID};
-    use one::transfer;
-    use one::tx_context::{Self, TxContext};
-    use one::coin::{Self, Coin};
-    use one::balance::{Self, Balance};
-    use one::table::{Self, Table};
-    use one::event;
-    use one::url::{Self, Url};
+    use sui::object::{Self, UID, ID};
+    use sui::transfer;
+    use sui::tx_context::{Self, TxContext};
+    use sui::coin::{Self, Coin};
+    use sui::balance::{Self, Balance};
+    use sui::table::{Self, Table};
+    use sui::event;
+    use sui::url::{Self, Url};
     
     // OneChain OCT native token type
-    // OCT is the native gas token on OneChain (one fork)
+    // OCT is the native gas token on OneChain (Sui fork)
     public struct OCT has drop {}
 
     // Error codes
@@ -21,7 +21,7 @@ module animemechandise::animemechandise {
     const EUnauthorized: u64 = 3;
 
     // Struct for anime merchandise metadata
-    public struct AnimeMerchandise has store, key {
+    struct AnimeMerchandise has store, key {
         id: UID,
         name: String,
         description: String,
@@ -39,7 +39,7 @@ module animemechandise::animemechandise {
     }
 
     // Struct for individual NFT tokens
-    public struct AnimeNFT has store, key {
+    struct AnimeNFT has store, key {
         id: UID,
         merchandise_id: ID,
         token_id: u64,
@@ -49,17 +49,16 @@ module animemechandise::animemechandise {
     }
 
     // Struct for marketplace
-    public struct Marketplace has key {
+    struct Marketplace has key {
         id: UID,
         items: Table<ID, AnimeMerchandise>,
         listings: Table<ID, Listing>,
         total_items: u64,
-        total_listings: u64,
-        total_nfts:u64
+        total_listings: u64
     }
 
     // Struct for NFT listings
-    public struct Listing has store {
+    struct Listing has store {
         nft: AnimeNFT,
         seller: address,
         price: u64,
@@ -67,7 +66,7 @@ module animemechandise::animemechandise {
     }
 
     // Struct for royalty distribution
-    public struct RoyaltyPool has key {
+    struct RoyaltyPool has key {
         id: UID,
         creator: address,
         balance: Balance<OCT>,
@@ -75,47 +74,47 @@ module animemechandise::animemechandise {
     }
 
     // Events
-    public struct ItemCreated has copy, drop {
+    struct ItemCreated has copy, drop {
         item_id: ID,
         name: String,
         creator: address,
         price: u64
     }
 
-    public struct NFTMinted has copy, drop {
+    struct NFTMinted has copy, drop {
         nft_id: ID,
         merchandise_id: ID,
         token_id: u64,
         owner: address
     }
 
-    public struct NFTSold has copy, drop {
+    struct NFTSold has copy, drop {
         nft_id: ID,
         seller: address,
         buyer: address,
         price: u64
     }
 
-    public struct NFTListed has copy, drop {
+    struct NFTListed has copy, drop {
         listing_id: ID,
         nft_id: ID,
         seller: address,
         price: u64
     }
 
-    public struct NFTUnlisted has copy, drop {
+    struct NFTUnlisted has copy, drop {
         listing_id: ID,
         nft_id: ID
     }
 
-    public struct RoyaltyPaid has copy, drop {
+    struct RoyaltyPaid has copy, drop {
         creator: address,
         amount: u64,
         nft_id: ID
     }
 
     // Capability for marketplace operations
-    public struct MarketplaceCap has key, store {
+    struct MarketplaceCap has key, store {
         id: UID
     }
 
@@ -126,8 +125,7 @@ module animemechandise::animemechandise {
             items: table::new(ctx),
             listings: table::new(ctx),
             total_items: 0,
-            total_listings: 0,
-            total_nfts:0
+            total_listings: 0
         };
         
         transfer::share_object(marketplace);

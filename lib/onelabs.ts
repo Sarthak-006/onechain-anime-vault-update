@@ -3,10 +3,13 @@ import { Transaction } from "@onelabs/sui/transactions"
 import type { Ed25519Keypair } from "@onelabs/sui/keypairs/ed25519"
 
 // OneChain OCT Network configuration
+// Reference: https://docs.onelabs.cc/RPC and https://docs.onelabs.cc/API
+// Explorer: https://onescan.cc/testnet/
 export const NETWORK_CONFIG = {
   testnet: {
     rpc: "https://rpc-testnet.onelabs.cc:443",
     faucet: "https://faucet-testnet.onelabs.cc:443",
+    explorer: "https://onescan.cc/testnet",
     chainId: "0x1",
     name: "OneChain OCT Testnet",
     nativeCurrency: {
@@ -18,6 +21,7 @@ export const NETWORK_CONFIG = {
   mainnet: {
     rpc: "https://rpc.mainnet.onelabs.cc:443",
     faucet: null,
+    explorer: "https://onescan.cc",
     chainId: "0x1",
     name: "OneChain OCT Mainnet",
     nativeCurrency: {
@@ -28,21 +32,51 @@ export const NETWORK_CONFIG = {
   },
 }
 
+// Helper function to get explorer URL for transactions
+export const getExplorerUrl = (type: 'transaction' | 'object' | 'account', id: string, network: 'testnet' | 'mainnet' = 'testnet'): string => {
+  const baseUrl = NETWORK_CONFIG[network].explorer
+  switch (type) {
+    case 'transaction':
+      return `${baseUrl}/transactionBlocksDetail?digest=${id}`
+    case 'object':
+      return `${baseUrl}/object/${id}`
+    case 'account':
+      return `${baseUrl}/account?address=${id}`
+    default:
+      return baseUrl
+  }
+}
+
 // Initialize OneChain OCT client
 export const suiClient = new SuiClient({
   url: NETWORK_CONFIG.testnet.rpc,
-  // OneChain OCT specific configuration
-  options: {
-    network: "testnet",
-    chainId: NETWORK_CONFIG.testnet.chainId
-  }
 })
 
-// NFT Contract addresses (these would be deployed contracts)
-export const CONTRACT_ADDRESSES = {
-  ANIME_NFT_PACKAGE: "0x...", // Replace with actual package ID
-  MARKETPLACE_PACKAGE: "0x...", // Replace with actual package ID
+// Load deployment info
+let deploymentInfo: any = null
+try {
+  deploymentInfo = require("../deployment-info.json")
+} catch {
+  console.warn("Deployment info not found. Please deploy contract first.")
 }
+
+// NFT Contract metadata - Updated from finalproofpack.txt
+// Contract address: 0x02c23edcb0cc861f892d22776d83e21e5b6a953c17e6b2011b5721b608c6fc64
+// Module: animetranferprotocolnew
+export const CONTRACT_ADDRESSES = {
+  PACKAGE_ID: deploymentInfo?.packageId || "0x02c23edcb0cc861f892d22776d83e21e5b6a953c17e6b2011b5721b608c6fc64",
+  NFT_COUNT_ID: deploymentInfo?.nftCountId || "0x801f449ccb8d78ff3b8cdd20824806aff8d866087bc0faafdca365309d602d52",
+  LAND_REGISTRY_ID: deploymentInfo?.landRegistryId || "0x9c125a32b0f1645361d112b62baab2ae25cecce732bb0b539dbbb7fb1bf7d5ae",
+  LAND_REGISTRY_ADDRESS_ID: deploymentInfo?.landRegistryAddressId || "0xe738a6a7bd81fbe533b363bb5efcd726b3afea1a2107d3667319062c520a173b",
+  // Legacy fields for backward compatibility
+  MARKETPLACE_ID: deploymentInfo?.marketplaceId || "",
+  MARKETPLACE_CAP_ID: deploymentInfo?.marketplaceCapId || "",
+}
+
+export const CONTRACT_MODULE = deploymentInfo?.moduleName || "animetranferprotocolnew"
+
+export const contractTarget = (fnName: string) =>
+  CONTRACT_ADDRESSES.PACKAGE_ID ? `${CONTRACT_ADDRESSES.PACKAGE_ID}::${CONTRACT_MODULE}::${fnName}` : ""
 
 // Helper functions for NFT operations
 export class AnimeNFTService {
@@ -54,41 +88,61 @@ export class AnimeNFTService {
 
   // Mint new anime merchandise NFT
   async mintAnimeNFT(
-    keypair: Ed25519Keypair,
-    name: string,
-    description: string,
-    imageUrl: string,
-    category: string,
-    rarity: string,
+    merchandiseId: string,
+    signer?: Ed25519Keypair,
   ) {
+    if (!CONTRACT_ADDRESSES.PACKAGE_ID) {
+      // Return mock transaction if contract not deployed
+      console.warn('Contract not deployed. Returning mock transaction for testing.')
+      return Promise.resolve({
+        digest: '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
+        effects: { status: { status: 'success' } },
+        objectChanges: [{
+          type: 'created',
+          objectId: '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
+          objectType: `${CONTRACT_ADDRESSES.PACKAGE_ID || 'MOCK'}::anime_nft::AnimeNFT`
+        }]
+      })
+    }
+
     const tx = new Transaction()
 
-    // This would call your deployed Move contract
-    tx.moveCall({
-      target: `${CONTRACT_ADDRESSES.ANIME_NFT_PACKAGE}::anime_nft::mint`,
+    const [nft] = tx.moveCall({
+      target: contractTarget("mint_nft"),
       arguments: [
-        tx.pure.string(name),
-        tx.pure.string(description),
-        tx.pure.string(imageUrl),
-        tx.pure.string(category),
-        tx.pure.string(rarity),
+        tx.object(CONTRACT_ADDRESSES.MARKETPLACE_CAP_ID),
+        tx.object(CONTRACT_ADDRESSES.MARKETPLACE_ID),
+        tx.pure.string(merchandiseId),
       ],
     })
 
-    const result = await this.client.signAndExecuteTransaction({
-      signer: keypair,
-      transaction: tx,
-    })
+    if (signer) {
+      tx.transferObjects([nft], signer.toSuiAddress())
+      
+      const result = await this.client.signAndExecuteTransaction({
+        signer,
+        transaction: tx,
+        options: {
+          showEffects: true,
+          showObjectChanges: true,
+        },
+      })
+      return result
+    }
 
-    return result
+    return tx
   }
 
   // Get user's NFT collection
   async getUserNFTs(address: string) {
+    if (!CONTRACT_ADDRESSES.PACKAGE_ID) {
+      return []
+    }
+
     const objects = await this.client.getOwnedObjects({
       owner: address,
       filter: {
-        StructType: `${CONTRACT_ADDRESSES.ANIME_NFT_PACKAGE}::anime_nft::AnimeNFT`,
+        StructType: `${CONTRACT_ADDRESSES.PACKAGE_ID}::anime_nft::AnimeNFT`,
       },
       options: {
         showContent: true,
@@ -100,37 +154,123 @@ export class AnimeNFTService {
   }
 
   // List NFT on marketplace
-  async listNFT(keypair: Ed25519Keypair, nftId: string, price: number) {
+  async listNFT(nftId: string, price: number, signer?: Ed25519Keypair) {
+    if (!CONTRACT_ADDRESSES.PACKAGE_ID) {
+      // Return mock transaction if contract not deployed
+      console.warn('Contract not deployed. Returning mock transaction for testing.')
+      return Promise.resolve({
+        digest: '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
+        effects: { status: { status: 'success' } },
+        events: [{ type: 'NFTListed', parsedJson: { nft_id: nftId, price } }]
+      })
+    }
+
     const tx = new Transaction()
 
     tx.moveCall({
-      target: `${CONTRACT_ADDRESSES.MARKETPLACE_PACKAGE}::marketplace::list_nft`,
-      arguments: [tx.object(nftId), tx.pure.u64(price)],
+      target: contractTarget("list_nft"),
+      arguments: [
+        tx.object(CONTRACT_ADDRESSES.MARKETPLACE_ID),
+        tx.object(nftId),
+        tx.pure.u64(price),
+      ],
     })
 
-    const result = await this.client.signAndExecuteTransaction({
-      signer: keypair,
-      transaction: tx,
-    })
+    if (signer) {
+      const result = await this.client.signAndExecuteTransaction({
+        signer,
+        transaction: tx,
+        options: {
+          showEffects: true,
+          showEvents: true,
+        },
+      })
+      return result
+    }
 
-    return result
+    return tx
   }
 
   // Purchase NFT from marketplace
-  async purchaseNFT(keypair: Ed25519Keypair, listingId: string, price: number) {
+  async purchaseNFT(listingId: string, price: number, signer?: Ed25519Keypair) {
+    if (!CONTRACT_ADDRESSES.PACKAGE_ID) {
+      // Return mock transaction if contract not deployed
+      console.warn('Contract not deployed. Returning mock transaction for testing.')
+      return Promise.resolve({
+        digest: '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
+        effects: { status: { status: 'success' } },
+        events: [{ type: 'NFTSold', parsedJson: { listing_id: listingId, price } }]
+      })
+    }
+
     const tx = new Transaction()
 
+    const [payment] = tx.splitCoins(tx.gas, [price])
+
     tx.moveCall({
-      target: `${CONTRACT_ADDRESSES.MARKETPLACE_PACKAGE}::marketplace::purchase_nft`,
-      arguments: [tx.object(listingId), tx.pure.u64(price)],
+      target: contractTarget("buy_nft"),
+      arguments: [
+        tx.object(CONTRACT_ADDRESSES.MARKETPLACE_ID),
+        tx.pure.id(listingId),
+        payment,
+      ],
     })
 
-    const result = await this.client.signAndExecuteTransaction({
-      signer: keypair,
-      transaction: tx,
-    })
+    if (signer) {
+      const result = await this.client.signAndExecuteTransaction({
+        signer,
+        transaction: tx,
+        options: {
+          showEffects: true,
+          showEvents: true,
+        },
+      })
+      return result
+    }
 
-    return result
+    return tx
+  }
+
+  // Get marketplace listings
+  async getMarketplaceListings() {
+    if (!CONTRACT_ADDRESSES.MARKETPLACE_ID) {
+      return []
+    }
+
+    try {
+      const marketplace = await this.client.getObject({
+        id: CONTRACT_ADDRESSES.MARKETPLACE_ID,
+        options: {
+          showContent: true,
+        },
+      })
+
+      return marketplace
+    } catch (error) {
+      console.error('Failed to fetch marketplace:', error)
+      return []
+    }
+  }
+
+  // Request testnet SUI from faucet
+  async requestFaucet(address: string) {
+    try {
+      const response = await fetch(`${NETWORK_CONFIG.testnet.faucet}/gas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          FixedAmountRequest: { recipient: address }
+        })
+      })
+
+      if (response.ok) {
+        return await response.json()
+      }
+      throw new Error('Faucet request failed')
+    } catch (error) {
+      console.error('Faucet error:', error)
+      throw error
+    }
   }
 }
 

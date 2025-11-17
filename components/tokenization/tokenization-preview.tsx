@@ -35,13 +35,37 @@ export function TokenizationPreview({ data, onConfirm, isLoading }: Tokenization
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="overflow-hidden">
           <div className="relative">
-            <div className="aspect-square bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
-              <div className="text-center">
-                <Sparkles className="h-16 w-16 text-primary mx-auto mb-4" />
-                <p className="text-sm text-muted-foreground">NFT Image Preview</p>
-                <p className="text-xs text-muted-foreground mt-1">{data.images?.length || 0} image(s) uploaded</p>
+            {data.images && data.images.length > 0 ? (
+              <div className="aspect-square bg-muted flex items-center justify-center overflow-hidden">
+                {data.images[0] instanceof File ? (
+                  <img
+                    src={URL.createObjectURL(data.images[0])}
+                    alt="NFT Preview"
+                    className="w-full h-full object-cover"
+                  />
+                ) : typeof data.images[0] === 'string' ? (
+                  <img
+                    src={data.images[0]}
+                    alt="NFT Preview"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="text-center">
+                    <Sparkles className="h-16 w-16 text-primary mx-auto mb-4" />
+                    <p className="text-sm text-muted-foreground">NFT Image Preview</p>
+                    <p className="text-xs text-muted-foreground mt-1">{data.images.length} image(s) uploaded</p>
+                  </div>
+                )}
               </div>
-            </div>
+            ) : (
+              <div className="aspect-square bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+                <div className="text-center">
+                  <Sparkles className="h-16 w-16 text-primary mx-auto mb-4" />
+                  <p className="text-sm text-muted-foreground">No image uploaded</p>
+                  <p className="text-xs text-destructive mt-1">Please go back and upload an image</p>
+                </div>
+              </div>
+            )}
             <div
               className={`absolute top-4 left-4 px-3 py-1 rounded-full text-white text-sm font-medium ${getRarityColor(data.rarity)}`}
             >
@@ -159,7 +183,12 @@ export function TokenizationPreview({ data, onConfirm, isLoading }: Tokenization
           </p>
         </div>
 
-        <Button onClick={onConfirm} disabled={isLoading} size="lg" className="px-8">
+        <Button 
+          onClick={onConfirm} 
+          disabled={isLoading || !data.images || data.images.length === 0} 
+          size="lg" 
+          className="px-8"
+        >
           {isLoading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -172,6 +201,12 @@ export function TokenizationPreview({ data, onConfirm, isLoading }: Tokenization
             </>
           )}
         </Button>
+        
+        {(!data.images || data.images.length === 0) && (
+          <p className="text-sm text-destructive text-center">
+            Please go back and upload an image before minting.
+          </p>
+        )}
 
         {isLoading && (
           <div className="text-sm text-muted-foreground space-y-1">

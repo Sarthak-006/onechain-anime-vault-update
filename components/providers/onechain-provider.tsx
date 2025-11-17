@@ -56,20 +56,6 @@ export function OneChainProviderWrapper({ children }: OneChainProviderWrapperPro
             <SuiClientProvider
                 networks={networkConfig}
                 defaultNetwork="testnet"
-                // Force OneChain OCT testnet configuration
-                networkConfig={{
-                    testnet: ONECHAIN_OCT_NETWORK.testnet
-                }}
-                // Additional OneChain OCT configuration
-                options={{
-                    network: "testnet",
-                    chainId: "0x1",
-                    nativeCurrency: {
-                        name: "OCT",
-                        symbol: "OCT",
-                        decimals: 9
-                    }
-                }}
             >
                 <WalletProvider>
                     {children}

@@ -26,6 +26,7 @@ import {
 import Link from "next/link"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ListNFTDialog } from "@/components/nft/list-nft-dialog"
 
 // Mock user data
 const mockUser = {
@@ -148,6 +149,8 @@ export default function DashboardPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [searchQuery, setSearchQuery] = useState("")
   const [filterBy, setFilterBy] = useState("all")
+  const [listDialogOpen, setListDialogOpen] = useState(false)
+  const [selectedNFT, setSelectedNFT] = useState<{ id: string; name: string } | null>(null)
 
   const getRarityColor = (rarity: string) => {
     switch (rarity) {
@@ -365,7 +368,14 @@ export default function DashboardPage() {
                               Unlist
                             </Button>
                           ) : (
-                            <Button size="sm" className="flex-1">
+                            <Button
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => {
+                                setSelectedNFT({ id: nft.id, name: nft.name })
+                                setListDialogOpen(true)
+                              }}
+                            >
                               List for Sale
                             </Button>
                           )}
@@ -429,7 +439,15 @@ export default function DashboardPage() {
                                     Unlist
                                   </Button>
                                 ) : (
-                                  <Button size="sm">List for Sale</Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedNFT({ id: nft.id, name: nft.name })
+                                      setListDialogOpen(true)
+                                    }}
+                                  >
+                                    List for Sale
+                                  </Button>
                                 )}
                                 <Button variant="ghost" size="sm" asChild>
                                   <Link href={`/marketplace/${nft.id}`}>
@@ -632,6 +650,16 @@ export default function DashboardPage() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* List NFT Dialog */}
+        {selectedNFT && (
+          <ListNFTDialog
+            open={listDialogOpen}
+            onOpenChange={setListDialogOpen}
+            nftId={selectedNFT.id}
+            nftName={selectedNFT.name}
+          />
+        )}
       </div>
     </div>
   )

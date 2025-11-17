@@ -7,9 +7,14 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Heart, Share2, ExternalLink, Clock, Eye, TrendingUp, Shield, Award, User, Tag, ArrowLeft } from "lucide-react"
+import { Heart, Share2, ExternalLink, Clock, Eye, TrendingUp, Shield, Award, User, Tag, ArrowLeft, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
+import { useToast } from "@/hooks/use-toast"
+import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from "@onelabs/dapp-kit"
+import { useOneWallet } from "@/lib/wallet"
+import { createPurchaseTransaction } from "@/lib/nft-operations"
+import { getExplorerUrl } from "@/lib/onelabs"
 
 // Mock NFT data - in real app, this would be fetched based on the ID
 const mockNFT = {
@@ -61,13 +66,75 @@ export default function NFTDetailPage() {
   const params = useParams()
   const [isLiked, setIsLiked] = useState(false)
   const [isPurchasing, setIsPurchasing] = useState(false)
+  const { toast } = useToast()
+  const account = useCurrentAccount()
+  const { mutate: signAndExecute, isPending: isTransactionPending } = useSignAndExecuteTransaction()
+  const suiClient = useSuiClient()
+  const { isConnected } = useOneWallet()
+
+  // TODO: Fetch actual listing ID from the NFT ID
+  // For now, this is a placeholder - in production, you'd query the blockchain
+  // to find the Listing object associated with this NFT
+  const listingId = "" // This should be fetched from the blockchain
 
   const handlePurchase = async () => {
+    if (!isConnected || !account) {
+      toast({
+        title: "Wallet not connected",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!listingId) {
+      toast({
+        title: "Listing not found",
+        description: "This NFT is not currently listed for sale",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsPurchasing(true)
-    // Simulate purchase process
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-    setIsPurchasing(false)
-    // In real app, this would integrate with OneLabs SDK
+
+    try {
+      const tx = createPurchaseTransaction(listingId)
+
+      const digest = await new Promise<string>((resolve, reject) => {
+        signAndExecute(
+          { transaction: tx as any },
+          {
+            onError: (error) => reject(error),
+            onSuccess: ({ digest }) => resolve(digest),
+          }
+        )
+      })
+
+      const result = await suiClient.waitForTransaction({
+        digest,
+        options: { showEffects: true, showObjectChanges: true },
+      })
+
+      console.log("Purchase successful:", digest)
+      console.log("View on Explorer:", getExplorerUrl("transaction", digest))
+
+      toast({
+        title: "NFT Purchased Successfully! 🎉",
+        description: `You are now the owner of ${mockNFT.name}. View on explorer: ${getExplorerUrl("transaction", digest)}`,
+      })
+
+      // TODO: Refresh the page or update state to reflect new ownership
+    } catch (error: any) {
+      console.error("Purchase failed:", error)
+      toast({
+        title: "Purchase failed",
+        description: error.message || "An unexpected error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setIsPurchasing(false)
+    }
   }
 
   const handleShare = () => {
@@ -190,10 +257,17 @@ export default function NFTDetailPage() {
               <CardContent>
                 <div className="text-3xl font-bold text-primary mb-4">{mockNFT.price} OCT</div>
                 <div className="flex gap-3">
-                  <Button className="flex-1" onClick={handlePurchase} disabled={isPurchasing}>
-                    {isPurchasing ? "Processing..." : "Buy Now"}
+                  <Button className="flex-1" onClick={handlePurchase} disabled={isPurchasing || isTransactionPending}>
+                    {isPurchasing || isTransactionPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      "Buy Now"
+                    )}
                   </Button>
-                  <Button variant="outline" className="bg-transparent">
+                  <Button variant="outline" className="bg-transparent" disabled>
                     Make Offer
                   </Button>
                 </div>
