@@ -151,7 +151,7 @@ export function WalletInfo() {
                     <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => window.open(`https://explorer-testnet.onelabs.cc/account/${address}`, '_blank')}
+                        onClick={() => window.open(`https://onescan.cc/testnet/account?address=${address}`, '_blank')}
                         className="flex-1"
                     >
                         <ExternalLink className="h-4 w-4 mr-2" />

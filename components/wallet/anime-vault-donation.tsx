@@ -66,7 +66,7 @@ export function AnimeVaultDonation() {
             const primaryCoin = coins.data[0].coinObjectId
 
             // If we need more than what's in the first coin, merge coins first
-            if (coins.data[0].balance < amountInMist) {
+            if (parseInt(coins.data[0].balance) < amountInMist) {
                 const coinObjects = coins.data.map(coin => tx.object(coin.coinObjectId))
                 const mergedCoin = tx.mergeCoins(tx.object(primaryCoin), coinObjects.slice(1))
                 const [coinToTransfer] = tx.splitCoins(mergedCoin, [amountInMist])

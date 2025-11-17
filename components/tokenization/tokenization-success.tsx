@@ -76,7 +76,7 @@ export function TokenizationSuccess({ nft }: TokenizationSuccessProps) {
           <div className="pt-2">
             <Button variant="outline" size="sm" className="w-full bg-transparent" asChild>
               <a
-                href={`https://explorer-testnet.onelabs.cc/tx/${nft.transactionHash}`}
+                href={`https://onescan.cc/testnet/transactionBlocksDetail?digest=${nft.transactionHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2"

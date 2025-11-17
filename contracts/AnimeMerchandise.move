@@ -1,7 +1,7 @@
 module anime_merchandise::anime_nft {
     use std::string::{Self, String};
     use std::vector;
-    use sui::object::{Self, UID};
+    use sui::object::{Self, UID, ID};
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
     use sui::coin::{Self, Coin};
@@ -9,6 +9,10 @@ module anime_merchandise::anime_nft {
     use sui::table::{Self, Table};
     use sui::event;
     use sui::url::{Self, Url};
+    
+    // OneChain OCT native token type
+    // OCT is the native gas token on OneChain (Sui fork)
+    public struct OCT has drop {}
 
     // Error codes
     const EInsufficientBalance: u64 = 0;
@@ -48,9 +52,17 @@ module anime_merchandise::anime_nft {
     struct Marketplace has key {
         id: UID,
         items: Table<ID, AnimeMerchandise>,
-        nfts: Table<ID, AnimeNFT>,
+        listings: Table<ID, Listing>,
         total_items: u64,
-        total_nfts: u64
+        total_listings: u64
+    }
+
+    // Struct for NFT listings
+    struct Listing has store {
+        nft: AnimeNFT,
+        seller: address,
+        price: u64,
+        listed_at: u64
     }
 
     // Struct for royalty distribution
@@ -83,6 +95,18 @@ module anime_merchandise::anime_nft {
         price: u64
     }
 
+    struct NFTListed has copy, drop {
+        listing_id: ID,
+        nft_id: ID,
+        seller: address,
+        price: u64
+    }
+
+    struct NFTUnlisted has copy, drop {
+        listing_id: ID,
+        nft_id: ID
+    }
+
     struct RoyaltyPaid has copy, drop {
         creator: address,
         amount: u64,
@@ -99,9 +123,9 @@ module anime_merchandise::anime_nft {
         let marketplace = Marketplace {
             id: object::new(ctx),
             items: table::new(ctx),
-            nfts: table::new(ctx),
+            listings: table::new(ctx),
             total_items: 0,
-            total_nfts: 0
+            total_listings: 0
         };
         
         transfer::share_object(marketplace);
@@ -204,14 +228,93 @@ module anime_merchandise::anime_nft {
         transfer::transfer(nft, recipient);
     }
 
+    // List NFT for sale
+    public entry fun list_nft(
+        marketplace: &mut Marketplace,
+        nft: AnimeNFT,
+        price: u64,
+        ctx: &mut TxContext
+    ) {
+        let nft_id = object::id(&nft);
+        let listing_id = object::new(ctx);
+        let listing_id_copy = object::uid_to_inner(&listing_id);
+        
+        let listing = Listing {
+            nft,
+            seller: tx_context::sender(ctx),
+            price,
+            listed_at: tx_context::epoch(ctx)
+        };
+        
+        table::add(&mut marketplace.listings, listing_id_copy, listing);
+        marketplace.total_listings = marketplace.total_listings + 1;
+        
+        event::emit(NFTListed {
+            listing_id: listing_id_copy,
+            nft_id,
+            seller: tx_context::sender(ctx),
+            price
+        });
+        
+        object::delete(listing_id);
+    }
+
+    // Buy NFT from marketplace
+    public entry fun buy_nft(
+        marketplace: &mut Marketplace,
+        listing_id: ID,
+        payment: Coin<OCT>,
+        ctx: &mut TxContext
+    ) {
+        let listing = table::remove(&mut marketplace.listings, listing_id);
+        let Listing { nft, seller, price, listed_at: _ } = listing;
+        
+        // Verify payment amount
+        assert!(coin::value(&payment) >= price, EInsufficientBalance);
+        
+        // Transfer payment to seller
+        transfer::public_transfer(payment, seller);
+        
+        // Transfer NFT to buyer
+        let nft_id = object::id(&nft);
+        let buyer = tx_context::sender(ctx);
+        transfer::transfer(nft, buyer);
+        
+        marketplace.total_listings = marketplace.total_listings - 1;
+        
+        event::emit(NFTSold {
+            nft_id,
+            seller,
+            buyer,
+            price
+        });
+    }
+
+    // Unlist NFT
+    public entry fun unlist_nft(
+        marketplace: &mut Marketplace,
+        listing_id: ID,
+        ctx: &mut TxContext
+    ) {
+        let listing = table::remove(&mut marketplace.listings, listing_id);
+        let Listing { nft, seller, price: _, listed_at: _ } = listing;
+        
+        assert!(seller == tx_context::sender(ctx), EUnauthorized);
+        
+        let nft_id = object::id(&nft);
+        transfer::transfer(nft, seller);
+        
+        marketplace.total_listings = marketplace.total_listings - 1;
+        
+        event::emit(NFTUnlisted {
+            listing_id,
+            nft_id
+        });
+    }
+
     // Get merchandise item
     public fun get_item(marketplace: &Marketplace, item_id: ID): &AnimeMerchandise {
         table::borrow(&marketplace.items, item_id)
-    }
-
-    // Get NFT
-    public fun get_nft(marketplace: &Marketplace, nft_id: ID): &AnimeNFT {
-        table::borrow(&marketplace.nfts, nft_id)
     }
 
     // Get total items count
@@ -219,8 +322,8 @@ module anime_merchandise::anime_nft {
         marketplace.total_items
     }
 
-    // Get total NFTs count
-    public fun get_total_nfts(marketplace: &Marketplace): u64 {
-        marketplace.total_nfts
+    // Get total listings count
+    public fun get_total_listings(marketplace: &Marketplace): u64 {
+        marketplace.total_listings
     }
 }

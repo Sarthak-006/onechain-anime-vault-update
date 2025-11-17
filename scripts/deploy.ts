@@ -1,13 +1,14 @@
-import { SuiClient, getFullnodeUrl } from '@onelabs/sui/client';
+import { SuiClient } from '@onelabs/sui/client';
 import { Ed25519Keypair } from '@onelabs/sui/keypairs/ed25519';
-import { TransactionBlock } from '@onelabs/sui/transactions';
-import { fromB64 } from '@onelabs/sui/utils';
+import { fromB64, toB64 } from '@onelabs/sui/utils';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 
 // Configuration
 const TESTNET_URL = 'https://rpc-testnet.onelabs.cc:443';
-const DEPLOYER_ADDRESS = '0x0afb16edad0861f1c1d3238bee4a759a75aad531ed363ee692a30108d6c4c8a4';
+const KEYSTORE_PATH = path.join(process.env.HOME || '~', '.sui', 'sui_config', 'sui.keystore');
+const CLIENT_YAML_PATH = path.join(process.env.HOME || '~', '.sui', 'sui_config', 'client.yaml');
 
 async function main() {
     console.log('🚀 Starting deployment of Anime Merchandise Tokenization Platform...');
@@ -16,26 +17,19 @@ async function main() {
     const client = new SuiClient({ url: TESTNET_URL });
     console.log(`✅ Connected to OneChain testnet: ${TESTNET_URL}`);
     
-    // Generate or load keypair
-    let keypair: Ed25519Keypair;
+    // Setup Sui CLI config
+    setupSuiConfig();
     
-    // Check if keyfile exists
-    const keyfilePath = path.join(__dirname, '../.sui/sui_config/sui.keystore');
-    if (fs.existsSync(keyfilePath)) {
-        const keystore = JSON.parse(fs.readFileSync(keyfilePath, 'utf8'));
-        const privateKey = fromB64(keystore[0]);
-        keypair = Ed25519Keypair.fromSecretKey(privateKey);
-        console.log('✅ Loaded existing keypair from keystore');
-    } else {
-        // Generate new keypair
-        keypair = new Ed25519Keypair();
-        console.log('✅ Generated new keypair');
-        console.log(`📝 Public key: ${keypair.getPublicKey().toSuiAddress()}`);
-        console.log('⚠️  Please save this keypair securely!');
+    // Get active address from Sui CLI
+    let address: string;
+    try {
+        address = execSync('sui client active-address', { encoding: 'utf8' }).trim();
+        console.log(`📍 Deployer address: ${address}`);
+    } catch (error) {
+        console.error('❌ Failed to get active address from Sui CLI');
+        console.log('💡 Make sure you have run: sui client new-address ed25519');
+        throw error;
     }
-    
-    const address = keypair.getPublicKey().toSuiAddress();
-    console.log(`📍 Deployer address: ${address}`);
     
     // Check balance
     try {
@@ -43,90 +37,89 @@ async function main() {
             owner: address,
             coinType: '0x2::sui::SUI'
         });
-        console.log(`💰 Balance: ${balance.totalBalance} SUI`);
+        console.log(`💰 Balance: ${balance.totalBalance} MIST (OCT)`);
         
-        if (parseInt(balance.totalBalance) < 1000000000) { // Less than 1 SUI
-            console.log('⚠️  Low balance detected. Please ensure you have sufficient SUI for deployment.');
+        // If balance is 0 but we're deploying, check if coins actually exist
+        if (parseInt(balance.totalBalance) === 0) {
+            console.log('⚠️  Balance shows 0, checking for gas coins...');
+            try {
+                const objects = await client.getOwnedObjects({
+                    owner: address,
+                    options: { showType: true }
+                });
+                const gasCoins = objects.data.filter(obj => 
+                    obj.data?.type?.includes('::coin::Coin')
+                );
+                if (gasCoins.length > 0) {
+                    console.log(`✅ Found ${gasCoins.length} gas coin(s), proceeding with deployment`);
+                } else {
+                    console.log('❌ No gas coins found. You need OCT for deployment.');
+                    console.log('💡 Request OCT from faucet: https://faucet-testnet.onelabs.cc:443');
+                    console.log(`💡 Your address: ${address}`);
+                    process.exit(1);
+                }
+            } catch (objError) {
+                console.log('⚠️  Could not verify gas coins, attempting deployment anyway...');
+            }
         }
     } catch (error) {
         console.log('⚠️  Could not fetch balance, proceeding with deployment...');
     }
     
-    // Build and deploy the package
-    console.log('\n🔨 Building and deploying smart contract...');
-    
+    // Build the Move package
+    console.log('\n🔨 Building Move contract...');
     try {
-        // Create transaction block for deployment
-        const tx = new TransactionBlock();
-        
-        // Deploy the package
-        const [upgradeCap] = tx.publish({
-            modules: [
-                fs.readFileSync(path.join(__dirname, '../build/anime_merchandise/bytecode_modules/anime_nft.mv')).toString('base64')
-            ],
-            dependencies: []
+        execSync('sui move build', { 
+            cwd: path.join(__dirname, '..'),
+            stdio: 'inherit' 
+        });
+        console.log('✅ Contract built successfully!');
+    } catch (buildError) {
+        console.error('❌ Build failed');
+        throw buildError;
+    }
+    
+    // Deploy using Sui CLI
+    console.log('\n📦 Deploying smart contract using Sui CLI...');
+    try {
+        const output = execSync('sui client publish --gas-budget 100000000 --json', {
+            cwd: path.join(__dirname, '..'),
+            encoding: 'utf8'
         });
         
-        // Transfer upgrade capability to deployer
-        tx.transferObjects([upgradeCap], tx.pure(address));
-        
-        // Execute transaction
-        const result = await client.signAndExecuteTransactionBlock({
-            signer: keypair,
-            transactionBlock: tx,
-            options: {
-                showEffects: true,
-                showObjectChanges: true
-            }
-        });
-        
+        const result = JSON.parse(output);
         console.log('✅ Deployment successful!');
         console.log(`📦 Transaction digest: ${result.digest}`);
-        console.log(`🏗️  Package ID: ${result.objectChanges?.find(change => change.type === 'published')?.packageId}`);
         
-        // Initialize marketplace
-        console.log('\n🏪 Initializing marketplace...');
-        await initializeMarketplace(client, keypair, result.objectChanges?.find(change => change.type === 'published')?.packageId);
+        // Extract package ID from object changes
+        const packageId = result.objectChanges?.find((change: any) => 
+            change.type === 'published'
+        )?.packageId;
         
-    } catch (error) {
-        console.error('❌ Deployment failed:', error);
-        throw error;
-    }
-}
-
-async function initializeMarketplace(client: SuiClient, keypair: Ed25519Keypair, packageId: string | undefined) {
-    if (!packageId) {
-        console.log('⚠️  Package ID not found, skipping marketplace initialization');
-        return;
-    }
-    
-    try {
-        const tx = new TransactionBlock();
+        if (!packageId) {
+            throw new Error('Package ID not found in deployment result');
+        }
         
-        // Call the init function
-        tx.moveCall({
-            target: `${packageId}::anime_nft::init`,
-            arguments: []
-        });
+        console.log(`🏗️  Package ID: ${packageId}`);
         
-        const result = await client.signAndExecuteTransactionBlock({
-            signer: keypair,
-            transactionBlock: tx,
-            options: {
-                showEffects: true,
-                showObjectChanges: true
-            }
-        });
-        
-        console.log('✅ Marketplace initialized successfully!');
-        console.log(`📝 Transaction digest: ${result.digest}`);
+        // The marketplace should be automatically created by the init function
+        // Find the created marketplace objects
+        const marketplaceObj = result.objectChanges?.find((obj: any) => 
+            obj.type === 'created' && obj.objectType?.includes('Marketplace') && !obj.objectType?.includes('Cap')
+        );
+        const capObj = result.objectChanges?.find((obj: any) => 
+            obj.type === 'created' && obj.objectType?.includes('MarketplaceCap')
+        );
         
         // Save deployment info
         const deploymentInfo = {
             packageId,
-            marketplaceInitTx: result.digest,
-            deployerAddress: keypair.getPublicKey().toSuiAddress(),
+            marketplaceId: marketplaceObj?.objectId || '',
+            marketplaceCapId: capObj?.objectId || '',
+            deploymentTx: result.digest,
+            deployerAddress: address,
             network: 'testnet',
+            rpcUrl: TESTNET_URL,
             deployedAt: new Date().toISOString()
         };
         
@@ -135,28 +128,83 @@ async function initializeMarketplace(client: SuiClient, keypair: Ed25519Keypair,
             JSON.stringify(deploymentInfo, null, 2)
         );
         
-        console.log('📄 Deployment info saved to deployment-info.json');
+        console.log('\n📄 Deployment info saved to deployment-info.json');
+        console.log(`🏪 Marketplace ID: ${deploymentInfo.marketplaceId}`);
+        console.log(`🔑 Marketplace Cap ID: ${deploymentInfo.marketplaceCapId}`);
         
-    } catch (error) {
-        console.error('❌ Marketplace initialization failed:', error);
+    } catch (error: any) {
+        if (error.message?.includes('Insufficient funds')) {
+            console.error('❌ Insufficient funds for deployment');
+            console.log('💡 Request more OCT from faucet: https://faucet-testnet.onelabs.cc:443');
+        } else {
+            console.error('❌ Deployment failed:', error.message || error);
+        }
         throw error;
     }
 }
 
-// Error handling
-process.on('unhandledRejection', (error) => {
-    console.error('❌ Unhandled rejection:', error);
-    process.exit(1);
-});
+function setupSuiConfig() {
+    console.log('\n⚙️  Setting up Sui CLI configuration...');
+    
+    // Ensure config directory exists
+    const configDir = path.dirname(KEYSTORE_PATH);
+    if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
+    }
+    
+    // Create client.yaml if it doesn't exist
+    if (!fs.existsSync(CLIENT_YAML_PATH)) {
+        console.log('📝 Creating Sui client configuration...');
+        const clientConfig = `---
+keystore:
+  File: ${KEYSTORE_PATH}
+envs:
+  - alias: onechain-testnet
+    rpc: "${TESTNET_URL}"
+    ws: ~
+active_env: onechain-testnet
+active_address: ~
+`;
+        fs.writeFileSync(CLIENT_YAML_PATH, clientConfig);
+        console.log('✅ Created client.yaml');
+    }
+    
+    // Create empty keystore if it doesn't exist
+    if (!fs.existsSync(KEYSTORE_PATH)) {
+        console.log('📝 Creating keystore...');
+        fs.writeFileSync(KEYSTORE_PATH, '[]');
+    }
+    
+    // Create new address
+    try {
+        const existingKeystore = JSON.parse(fs.readFileSync(KEYSTORE_PATH, 'utf8'));
+        if (existingKeystore.length === 0) {
+            console.log('📝 Generating new keypair...');
+            // Use echo to provide automatic "y" answer
+            execSync('echo "y" | sui client new-address ed25519', { 
+                stdio: ['pipe', 'inherit', 'inherit'],
+                shell: '/bin/bash'
+            });
+            console.log('✅ New address created');
+        } else {
+            console.log('✅ Using existing keystore');
+        }
+    } catch (error) {
+        console.log('⚠️  Continuing with setup...');
+    }
+}
 
 // Run deployment
 main()
     .then(() => {
         console.log('\n🎉 Deployment completed successfully!');
         console.log('🌟 Your Anime Merchandise Tokenization Platform is now live on OneChain testnet!');
+        console.log('\n📋 Next steps:');
+        console.log('   1. Run: pnpm run test:lifecycle');
+        console.log('   2. Check proof-pack.json for verification details');
         process.exit(0);
     })
     .catch((error) => {
-        console.error('\n💥 Deployment failed:', error);
+        console.error('\n💥 Deployment failed');
         process.exit(1);
     });
