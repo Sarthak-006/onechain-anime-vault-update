@@ -22,6 +22,13 @@ export const metadata: Metadata = {
   title: "AnimeVault - Tokenize Your Anime Collection",
   description: "The premier platform for tokenizing and trading anime merchandise as NFTs",
   generator: "v0.app",
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+    apple: [{ url: '/apple-icon.png', sizes: '180x180' }],
+  },
 }
 
 export default function RootLayout({
