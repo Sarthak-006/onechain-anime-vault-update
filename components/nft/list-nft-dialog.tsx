@@ -18,15 +18,18 @@ import { useOneWallet } from "@/lib/wallet"
 import { createListForSaleTransaction } from "@/lib/nft-operations"
 import { Loader2 } from "lucide-react"
 import { getExplorerUrl } from "@/lib/onelabs"
+import { logTransaction, markNFTListed } from "@/lib/nft-repository"
 
 interface ListNFTDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   nftId: string
   nftName: string
+  ownerAddress: string
+  onListed?: () => void
 }
 
-export function ListNFTDialog({ open, onOpenChange, nftId, nftName }: ListNFTDialogProps) {
+export function ListNFTDialog({ open, onOpenChange, nftId, nftName, ownerAddress, onListed }: ListNFTDialogProps) {
   const [price, setPrice] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
@@ -40,6 +43,15 @@ export function ListNFTDialog({ open, onOpenChange, nftId, nftName }: ListNFTDia
       toast({
         title: "Wallet not connected",
         description: "Please connect your wallet first",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!ownerAddress) {
+      toast({
+        title: "Missing owner address",
+        description: "Unable to determine NFT owner. Please reconnect your wallet.",
         variant: "destructive",
       })
       return
@@ -81,6 +93,24 @@ export function ListNFTDialog({ open, onOpenChange, nftId, nftName }: ListNFTDia
       )
 
       const listingId = listingObject?.objectId || ""
+      if (!listingId) {
+        throw new Error("Unable to determine Listing object ID from transaction response")
+      }
+
+      await markNFTListed(nftId, {
+        listing_id: listingId,
+        listing_price_oct: priceNum,
+        list_tx_digest: digest,
+        status: "listed",
+      })
+
+      await logTransaction({
+        nft_object_id: nftId,
+        type: "list",
+        tx_digest: digest,
+        actor_address: account?.address || "",
+        price_oct: priceNum,
+      })
 
       console.log("NFT listed successfully:", listingId)
       console.log("Transaction Hash:", digest)
@@ -93,6 +123,7 @@ export function ListNFTDialog({ open, onOpenChange, nftId, nftName }: ListNFTDia
 
       onOpenChange(false)
       setPrice("")
+      onListed?.()
     } catch (error: any) {
       console.error("Listing failed:", error)
       toast({

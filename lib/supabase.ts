@@ -1,8 +1,8 @@
 import { createClient } from "@supabase/supabase-js"
 
-// Use environment variables for security, with fallback for backward compatibility
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://soqzchswjemewyskkdmk.supabase.co"
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNvcXpjaHN3amVtZXd5c2trZG1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMwNTEyMjgsImV4cCI6MjA3ODYyNzIyOH0.HxBPw542edfp6UkH5Rl8gp32n1RaOxuhJxPekvlAe_c"
+// Use environment variables for security
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error("Missing Supabase configuration. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.")

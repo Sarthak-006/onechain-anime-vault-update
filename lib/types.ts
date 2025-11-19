@@ -58,3 +58,40 @@ export interface TokenizationRequest {
     provenanceDocuments?: File[]
   }
 }
+
+export interface StoredNft {
+  id: string
+  nft_object_id: string
+  name: string
+  description?: string | null
+  image_url?: string | null
+  category?: AnimeNFT["category"] | null
+  rarity?: AnimeNFT["rarity"] | null
+  series?: string | null
+  character?: string | null
+  manufacturer?: string | null
+  release_year?: number | null
+  condition?: string | null
+  creator_address: string
+  owner_address: string
+  status: "minted" | "listed" | "owned" | "sold"
+  price_oct?: number | null
+  listing_price_oct?: number | null
+  listing_id?: string | null
+  mint_tx_digest?: string | null
+  list_tx_digest?: string | null
+  purchase_tx_digest?: string | null
+  metadata?: Record<string, any> | null
+  created_at: string
+  updated_at: string
+}
+
+export interface NftTransaction {
+  id: string
+  nft_object_id: string
+  type: "mint" | "list" | "purchase"
+  tx_digest: string
+  actor_address: string
+  price_oct?: number | null
+  created_at: string
+}

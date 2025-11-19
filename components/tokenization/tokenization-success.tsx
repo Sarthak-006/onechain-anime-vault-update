@@ -23,11 +23,11 @@ export function TokenizationSuccess({ nft }: TokenizationSuccessProps) {
       navigator.share({
         title: `Check out my new NFT: ${nft.name}`,
         text: `I just minted "${nft.name}" as an NFT on AnimeVault!`,
-        url: window.location.origin + `/nft/${nft.id}`,
+        url: window.location.origin + `/marketplace/${nft.id}`,
       })
     } else {
       // Fallback to copying to clipboard
-      navigator.clipboard.writeText(window.location.origin + `/nft/${nft.id}`)
+      navigator.clipboard.writeText(window.location.origin + `/marketplace/${nft.id}`)
     }
   }
 
@@ -96,7 +96,7 @@ export function TokenizationSuccess({ nft }: TokenizationSuccessProps) {
           Share NFT
         </Button>
         <Button asChild className="flex items-center gap-2">
-          <Link href={`/nft/${nft.id}`}>
+          <Link href={`/marketplace/${nft.id}`}>
             <Eye className="h-4 w-4" />
             View NFT
           </Link>
