@@ -15,6 +15,7 @@ import { Transaction } from "@onelabs/sui/transactions"
 import { CONTRACT_ADDRESSES, CONTRACT_MODULE, contractTarget } from "@/lib/onelabs"
 import { useToast } from "@/hooks/use-toast"
 import { useOneWallet } from "@/lib/wallet"
+import { logTransaction, saveMintedNFT } from "@/lib/nft-repository"
 
 const steps = [
   { id: 1, name: "Item Details", description: "Basic information about your merchandise" },
@@ -213,6 +214,42 @@ export default function CreatePage() {
       if (nftObject?.objectId) {
         nftId = nftObject.objectId
       }
+
+      if (!nftId) {
+        throw new Error("Failed to retrieve minted NFT object ID from transaction result")
+      }
+
+      const metadata = {
+        attributes: tokenizationData.attributes,
+        verification: tokenizationData.physicalVerification,
+      }
+
+      await saveMintedNFT({
+        nft_object_id: nftId,
+        name: tokenizationData.itemName || "Anime NFT",
+        description: tokenizationData.description || "",
+        image_url: imageUrl,
+        category: (tokenizationData.category as string) || "other",
+        rarity: (tokenizationData.rarity as string) || "common",
+        series: tokenizationData.attributes?.series || "",
+        character: tokenizationData.attributes?.character || "",
+        manufacturer: tokenizationData.attributes?.manufacturer,
+        release_year: tokenizationData.attributes?.releaseYear
+          ? Number(tokenizationData.attributes.releaseYear)
+          : undefined,
+        condition: tokenizationData.attributes?.condition,
+        creator_address: account.address,
+        owner_address: account.address,
+        status: "minted",
+        mint_tx_digest: mintDigest,
+      })
+
+      await logTransaction({
+        nft_object_id: nftId,
+        type: "mint",
+        tx_digest: mintDigest,
+        actor_address: account.address,
+      })
 
       console.log("NFT ID:", nftId)
       console.log("Transaction Hash:", mintDigest)

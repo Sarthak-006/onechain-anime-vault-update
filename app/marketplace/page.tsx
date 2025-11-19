@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,130 +12,11 @@ import { Label } from "@/components/ui/label"
 import { Search, Filter, Grid3X3, List, Heart, Eye, TrendingUp, Clock } from "lucide-react"
 import Link from "next/link"
 import type { AnimeNFT } from "@/lib/types"
+import { fetchMarketplaceListings, type NftRecord } from "@/lib/nft-repository"
 
-// Mock data for marketplace NFTs
-const mockNFTs: AnimeNFT[] = [
-  {
-    id: "1",
-    name: "Demon Slayer Tanjiro Figure",
-    description: "Premium quality Tanjiro Kamado figure from the hit anime series Demon Slayer",
-    imageUrl: "/placeholder.svg?height=400&width=400&text=Tanjiro+Figure",
-    category: "figure",
-    rarity: "rare",
-    creator: "0x1234...5678",
-    owner: "0x8765...4321",
-    price: 12.5,
-    isListed: true,
-    createdAt: "2024-01-15",
-    attributes: {
-      series: "Demon Slayer",
-      character: "Tanjiro Kamado",
-      manufacturer: "Good Smile Company",
-      releaseYear: 2023,
-      condition: "mint",
-    },
-  },
-  {
-    id: "2",
-    name: "Attack on Titan Survey Corps Badge",
-    description: "Official Survey Corps badge replica from Attack on Titan",
-    imageUrl: "/placeholder.svg?height=400&width=400&text=Survey+Corps+Badge",
-    category: "accessory",
-    rarity: "uncommon",
-    creator: "0x2345...6789",
-    owner: "0x9876...5432",
-    price: 8.3,
-    isListed: true,
-    createdAt: "2024-01-14",
-    attributes: {
-      series: "Attack on Titan",
-      character: "Survey Corps",
-      manufacturer: "Crunchyroll Store",
-      releaseYear: 2022,
-      condition: "near-mint",
-    },
-  },
-  {
-    id: "3",
-    name: "One Piece Luffy Gold Card",
-    description: "Ultra rare holographic Monkey D. Luffy trading card",
-    imageUrl: "/placeholder.svg?height=400&width=400&text=Luffy+Gold+Card",
-    category: "card",
-    rarity: "legendary",
-    creator: "0x3456...7890",
-    owner: "0x0987...6543",
-    price: 25.0,
-    isListed: true,
-    createdAt: "2024-01-13",
-    attributes: {
-      series: "One Piece",
-      character: "Monkey D. Luffy",
-      manufacturer: "Bandai",
-      releaseYear: 2024,
-      condition: "mint",
-    },
-  },
-  {
-    id: "4",
-    name: "Naruto Hokage Poster",
-    description: "Limited edition poster featuring all Hokage from Naruto series",
-    imageUrl: "/placeholder.svg?height=400&width=400&text=Hokage+Poster",
-    category: "poster",
-    rarity: "epic",
-    creator: "0x4567...8901",
-    owner: "0x1098...7654",
-    price: 15.8,
-    isListed: true,
-    createdAt: "2024-01-12",
-    attributes: {
-      series: "Naruto",
-      character: "All Hokage",
-      manufacturer: "Viz Media",
-      releaseYear: 2023,
-      condition: "mint",
-    },
-  },
-  {
-    id: "5",
-    name: "My Hero Academia Deku Nendoroid",
-    description: "Adorable Deku Nendoroid with multiple expressions and accessories",
-    imageUrl: "/placeholder.svg?height=400&width=400&text=Deku+Nendoroid",
-    category: "figure",
-    rarity: "rare",
-    creator: "0x5678...9012",
-    owner: "0x2109...8765",
-    price: 18.2,
-    isListed: true,
-    createdAt: "2024-01-11",
-    attributes: {
-      series: "My Hero Academia",
-      character: "Izuku Midoriya",
-      manufacturer: "Good Smile Company",
-      releaseYear: 2023,
-      condition: "mint",
-    },
-  },
-  {
-    id: "6",
-    name: "Dragon Ball Z Goku Keychain",
-    description: "Collectible Goku keychain from Dragon Ball Z series",
-    imageUrl: "/placeholder.svg?height=400&width=400&text=Goku+Keychain",
-    category: "accessory",
-    rarity: "common",
-    creator: "0x6789...0123",
-    owner: "0x3210...9876",
-    price: 4.5,
-    isListed: true,
-    createdAt: "2024-01-10",
-    attributes: {
-      series: "Dragon Ball Z",
-      character: "Son Goku",
-      manufacturer: "Toei Animation",
-      releaseYear: 2022,
-      condition: "good",
-    },
-  },
-]
+interface MarketplaceItem extends AnimeNFT {
+  listingId?: string | null
+}
 
 export default function MarketplacePage() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -146,15 +27,65 @@ export default function MarketplacePage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [showFilters, setShowFilters] = useState(false)
 
+  const [nftRecords, setNftRecords] = useState<NftRecord[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    const load = async () => {
+      try {
+        const data = await fetchMarketplaceListings()
+        if (mounted) {
+          setNftRecords(data)
+        }
+      } catch (error) {
+        console.error("Failed to load marketplace listings:", error)
+      } finally {
+        if (mounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+    load()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const mapRecordToNFT = (record: NftRecord): MarketplaceItem => ({
+    id: record.nft_object_id,
+    name: record.name,
+    description: record.description || "",
+    imageUrl: record.image_url || "/placeholder.svg",
+    category: (record.category as AnimeNFT["category"]) || "other",
+    rarity: (record.rarity as AnimeNFT["rarity"]) || "common",
+    creator: record.creator_address,
+    owner: record.owner_address,
+    price: record.listing_price_oct || record.price_oct || undefined,
+    isListed: record.status === "listed",
+    createdAt: record.created_at,
+    attributes: {
+      series: record.series || "Unknown Series",
+      character: record.character || "Unknown Character",
+      manufacturer: record.manufacturer || undefined,
+      releaseYear: record.release_year || undefined,
+      condition: record.condition || undefined,
+    },
+    listingId: record.listing_id,
+  })
+
+  const marketplaceItems = useMemo(() => nftRecords.map(mapRecordToNFT), [nftRecords])
+
   const categories = ["figure", "card", "poster", "accessory", "other"]
   const rarities = ["common", "uncommon", "rare", "epic", "legendary"]
 
   const filteredAndSortedNFTs = useMemo(() => {
-    const filtered = mockNFTs.filter((nft) => {
+    const filtered = marketplaceItems.filter((nft) => {
       const matchesSearch =
+        searchQuery === "" ||
         nft.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        nft.attributes.series.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        nft.attributes.character.toLowerCase().includes(searchQuery.toLowerCase())
+        (nft.attributes.series && nft.attributes.series.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (nft.attributes.character && nft.attributes.character.toLowerCase().includes(searchQuery.toLowerCase()))
 
       const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(nft.category)
       const matchesRarity = selectedRarities.length === 0 || selectedRarities.includes(nft.rarity)
@@ -182,7 +113,7 @@ export default function MarketplacePage() {
     })
 
     return filtered
-  }, [searchQuery, selectedCategories, selectedRarities, priceRange, sortBy])
+  }, [marketplaceItems, searchQuery, selectedCategories, selectedRarities, priceRange, sortBy])
 
   const handleCategoryChange = (category: string, checked: boolean) => {
     if (checked) {
@@ -368,11 +299,15 @@ export default function MarketplacePage() {
           <div className="flex-1">
             <div className="flex items-center justify-between mb-6">
               <p className="text-muted-foreground">
-                {filteredAndSortedNFTs.length} NFT{filteredAndSortedNFTs.length !== 1 ? "s" : ""} found
+                {isLoading
+                  ? "Loading marketplace listings..."
+                  : `${filteredAndSortedNFTs.length} NFT${filteredAndSortedNFTs.length !== 1 ? "s" : ""} found`}
               </p>
             </div>
 
-            {viewMode === "grid" ? (
+            {isLoading ? (
+              <div className="text-center py-16 text-muted-foreground">Fetching live listings...</div>
+            ) : viewMode === "grid" ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredAndSortedNFTs.map((nft) => (
                   <Card key={nft.id} className="group hover:shadow-lg transition-all duration-300 overflow-hidden">
